@@ -17,6 +17,14 @@ import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
@@ -24,11 +32,13 @@ import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 
 import java.text.DateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.Dictionary;
 import java.util.HashMap;
 
 public class MainActivity extends AppCompatActivity implements GoogleApiClient.ConnectionCallbacks,
-        GoogleApiClient.OnConnectionFailedListener, LocationListener {
+        GoogleApiClient.OnConnectionFailedListener, LocationListener,OnMapReadyCallback {
     private static final int CONNECTION_FAILURE_RESOLUTION_REQUEST = 1;
     Location mLastLocation;
     LocationRequest mLocationRequest;
@@ -36,16 +46,21 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
     TextView lat, longi, text;
     String mLastUpdateTime;
     private static final String TAG = "mainactivity";
+    private static final String TAG1 = "checking";
     protected String mlat_label,mlong_label,mtime;
     Double latitude,longitude;
     FirebaseDatabase database;
-    DatabaseReference myRef;
+    DatabaseReference myRef,myRef1;
+    private GoogleMap mMap;
+    LatLng track;
+    HashMap<String,Object> location;
+     Double  longitude1,latitude1;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        lat = (TextView) findViewById(R.id.textView);
-        longi = (TextView) findViewById(R.id.textView2);
+        //lat = (TextView) findViewById(R.id.textView);
+        //longi = (TextView) findViewById(R.id.textView2);
         text = (TextView) findViewById(R.id.text);
         mlat_label="latitude";
         mlong_label="longitude";
@@ -53,19 +68,71 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
         // Write a message to the database
          database = FirebaseDatabase.getInstance();
          myRef = database.getReference("message");
-
+        myRef1=database.getReference("busdepot");
+        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
+                .findFragmentById(R.id.map);
+        mapFragment.getMapAsync(this);
         myRef.setValue("Hello, World!");
+        //longitude1=17.352267;
+        //
+        //
+        //
+        // latitude1=78.499789;
+        myRef1.addValueEventListener(new ValueEventListener() {
+
+            @Override
+            public void onDataChange(DataSnapshot dataSnapshot) {
+                ArrayList Userlist = new ArrayList<String>();
+
+
+                // Result will be holded Here
+                for (DataSnapshot dsp : dataSnapshot.getChildren()) {
+                    Userlist.add(String.valueOf(dsp.getKey())); //add result into array list
+                }
+                Log.d(TAG1,Userlist.toString());
+
+            }
+
+            @Override
+            public void onCancelled(DatabaseError databaseError) {
+
+            }
+        });
+
         myRef.child("user1").addValueEventListener(new ValueEventListener() {
             @Override
             public void onDataChange(DataSnapshot dataSnapshot) {
                 // This method is called once with the initial value and again
                 // whenever data at this location is updated.
-                HashMap location=new HashMap<String, Object>();
+                    location=new HashMap<String, Object>();
                 location.put("longitude",dataSnapshot.getValue(Boolean.parseBoolean("longitude")));
-                location.put("latitude",dataSnapshot.getValue(Boolean.parseBoolean("latitude")));
-                location.put("timestamp",dataSnapshot.getValue(Boolean.parseBoolean("timestamp")));
+                  location.put("latitude",dataSnapshot.getValue(Boolean.parseBoolean("latitude")));
+                  location.put("timestamp",dataSnapshot.getValue(Boolean.parseBoolean("timestamp")));
+                try {
+                        longitude1 = Double.parseDouble(String.valueOf( dataSnapshot.child("longitude").getValue()));
+                        latitude1 = Double.parseDouble(String.valueOf( dataSnapshot.child("latitude").getValue()));
+                        Log.d(TAG,longitude+" "+latitude);
+                    if(mMap!=null) {
+                        track = new LatLng(latitude1, longitude1);
+                        Log.d(TAG, "Value is: " + location.toString());
+                        LatLng hcmus = new LatLng(latitude1,longitude1);
+                        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(hcmus, 20));
+                        mMap.clear();
+                        MarkerOptions mpopt = new MarkerOptions()
+                                .position(track)
+                                .title("I am Here")
+                                .snippet("Population: 4,627,300")
+                                .flat(true)
+                                .visible(true);
+                        mMap.addMarker(mpopt);
 
-                Log.d(TAG, "Value is: " + location.toString());
+                    }
+
+
+                }catch(Exception e){
+                    Log.d(TAG,e.toString());
+                }
+
             }
 
             @Override
@@ -95,8 +162,8 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
     protected void createLocationRequest() {
         mLocationRequest = LocationRequest.create()
                 .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
-                .setInterval(10* 1000)        // 10 seconds, in milliseconds
-                .setFastestInterval(1 * 1000); // 1 second, in milliseconds
+                .setInterval(50* 1000)        // 10 seconds, in milliseconds
+                .setFastestInterval(10 * 1000); // 1 second, in milliseconds
 
     }
 
@@ -147,6 +214,7 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
             mLastLocation = location;
             latitude=location.getLatitude();
             longitude=location.getLongitude();
+
             mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
             updateUI();
         Toast.makeText(this, "location changed", Toast.LENGTH_SHORT).show();
@@ -195,11 +263,15 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
             myRef.child("user1").child("longitude").setValue(longitude);
             myRef.child("user1").child("latitude").setValue(latitude);
             myRef.child("user1").child("timestamp").setValue(mLastUpdateTime);
-            lat.setText(String.format("%s: %f", mlat_label,longitude));
-            longi.setText(String.format("%s: %f", mlong_label,latitude));
+           // lat.setText(String.format("%s: %f", mlat_label,longitude));
+           // longi.setText(String.format("%s: %f", mlong_label,latitude));
         }
     }
 
 
+    @Override
+    public void onMapReady(GoogleMap googleMap) {
+        mMap = googleMap;
 
+    }
 }
